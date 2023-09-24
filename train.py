@@ -9,6 +9,7 @@ import numpy as np
 from torch.utils.data import Dataset
 from PIL import Image
 import pdb
+import cv2
 
 from tqdm import tqdm
 from statistics import mean
@@ -26,7 +27,7 @@ from transformers import SamModel
 INPUT_PATCH_SIZE = 1024
 num_epochs = 1
 image_dir = '../data/data_crop1024_shift512/train_images'
-mask_dir = '../data/data_crop1024_shift512/1024-train-mask-mult'
+mask_dir = '../data/data_crop1024_shift512/train_mask'
 checkpoint_dir = 'checkpoints/'
 
 
@@ -65,10 +66,13 @@ class SAMDataset(Dataset):
     def __getitem__(self, idx):
         # item = self.dataset[idx]
         mask_path = os.path.join(self.mask_dir,self.mask_path_list[idx])
-        mask = Image.open(mask_path)
-        mask = mask.resize((256,256))
-        mask = np.array(mask)
-        mask[mask==2] =  1
+        # mask = Image.open(mask_path)
+        # mask = mask.resize((256,256))
+        # mask = np.array(mask)
+        # mask[mask==2] =  1
+        mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+        mask = cv2.resize(mask, (256, 256))
+        mask = cv2.threshold(mask, 127, 1, cv2.THRESH_BINARY)[1].astype(bool)
 
         ground_truth_mask = mask
         img_path = os.path.join(self.img_dir, self.mask_path_list[idx].replace('_mask',''))
@@ -82,6 +86,7 @@ class SAMDataset(Dataset):
         # prepare image and prompt for the model
         inputs = self.processor(image, input_boxes=[[prompt]], return_tensors="pt")
         
+        pdb.set_trace()
         # remove batch dimension which the processor adds by default
         inputs = {k:v.squeeze(0) for k,v in inputs.items()}
         
@@ -152,7 +157,7 @@ for epoch in range(num_epochs):
         optimizer.step()
         epoch_losses.append(loss.item())
         loop.set_description(f"Epoch [{epoch}/{num_epochs}]")
-        loop.set_postfix(loss=loss.items())
+        loop.set_postfix(loss=loss.item())
 
 
 
