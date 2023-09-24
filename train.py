@@ -20,6 +20,7 @@ from torch.utils.data import DataLoader
 from torch.optim import Adam
 import monai
 from scipy.ndimage import zoom
+import random 
 
 from transformers import SamModel 
 
@@ -27,7 +28,15 @@ INPUT_PATCH_SIZE = 1024
 num_epochs = 1
 image_dir = '../data/data_crop1024_shift512/train_images'
 mask_dir = '../data/data_crop1024_shift512/train_mask'
+positive_file = '../data/positive_list.txt'
+negative_file = '../data/negative_list.txt'
 checkpoint_dir = 'checkpoints/'
+
+with open(positive_file, 'r') as f:
+    positive_list = f.readlines()
+
+with open(negative_file, 'r') as f:
+    negative_list = f.readlines()
 
 
 class SAMDataset(Dataset):
@@ -41,44 +50,54 @@ class SAMDataset(Dataset):
         
         self.mask_path_list = os.listdir(mask_dir)
         self.transform = transform
+
+        self.positive_list = positive_list 
+        self.negative_list = negative_list
         
 
-    def get_bounding_box(self, ground_truth_map):
-        # get bounding box from mask
-        y_indices, x_indices = np.where(ground_truth_map > 0)
-        if len(x_indices) == 0:
-            return [0,0,INPUT_PATCH_SIZE,INPUT_PATCH_SIZE]
+    # def get_bounding_box(self, ground_truth_map):
+    #     # get bounding box from mask
+    #     y_indices, x_indices = np.where(ground_truth_map > 0)
+    #     if len(x_indices) == 0:
+    #         return [0,0,INPUT_PATCH_SIZE,INPUT_PATCH_SIZE]
         
-        x_min, x_max = np.min(x_indices), np.max(x_indices)
-        y_min, y_max = np.min(y_indices), np.max(y_indices)
-        # add perturbation to bounding box coordinates
-        H, W = ground_truth_map.shape
-        x_min = max(0, x_min - np.random.randint(0, 20))
-        x_max = min(W, x_max + np.random.randint(0, 20))
-        y_min = max(0, y_min - np.random.randint(0, 20))
-        y_max = min(H, y_max + np.random.randint(0, 20))
-        bbox = [x_min, y_min, x_max, y_max]
-        return bbox
+    #     x_min, x_max = np.min(x_indices), np.max(x_indices)
+    #     y_min, y_max = np.min(y_indices), np.max(y_indices)
+    #     # add perturbation to bounding box coordinates
+    #     H, W = ground_truth_map.shape
+    #     x_min = max(0, x_min - np.random.randint(0, 20))
+    #     x_max = min(W, x_max + np.random.randint(0, 20))
+    #     y_min = max(0, y_min - np.random.randint(0, 20))
+    #     y_max = min(H, y_max + np.random.randint(0, 20))
+    #     bbox = [x_min, y_min, x_max, y_max]
+    #     return bbox
     
     def __len__(self):
-        return len(self.mask_path_list)
+        return len(self.positive_list) * 2
     
     def __getitem__(self, idx):
-        # item = self.dataset[idx]
-        mask_path = os.path.join(self.mask_dir,self.mask_path_list[idx])
+        
+
+        if random.random() > 0.5: 
+            # select postive 
+            cur_filename = random.choice(self.positive_list).strip()
+        else:
+            # select negative
+            cur_filename = random.choice(self.negative_list).strip()
+
+        mask_path = os.path.join(self.mask_dir,cur_filename)
         # mask = Image.open(mask_path)
         # mask = mask.resize((256,256))
         # mask = np.array(mask)
         # mask[mask==2] =  1
+
         mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
         # mask = cv2.resize(mask, (256, 256))
         mask = cv2.threshold(mask, 127, 1, cv2.THRESH_BINARY)[1].astype(bool)
 
-        img_path = os.path.join(self.img_dir, self.mask_path_list[idx].replace('_mask',''))
+        img_path = os.path.join(self.img_dir, cur_filename)
         image = Image.open(img_path)
-        # image = item["image"]
-        # mask = np.array(item["label"])
-    
+
 
         if self.transform:
             image, mask = self.transform(image, mask)
