@@ -1,7 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[1]:
 
 
 import os
@@ -15,12 +11,15 @@ from tqdm import tqdm
 from statistics import mean
 import torch
 from torch.nn.functional import threshold, normalize
+import torchvision
+torchvision.disable_beta_transforms_warning()
+import torchvision.transforms.v2 as T
 
 from transformers import SamProcessor
 from torch.utils.data import DataLoader
 from torch.optim import Adam
 import monai
-
+from scipy.ndimage import zoom
 
 from transformers import SamModel 
 
@@ -32,7 +31,7 @@ checkpoint_dir = 'checkpoints/'
 
 
 class SAMDataset(Dataset):
-    def __init__(self, img_dir, mask_dir, processor):
+    def __init__(self, img_dir, mask_dir, processor, transform = None):
         self.processor = processor
 
         # get mask file path list
@@ -41,6 +40,7 @@ class SAMDataset(Dataset):
         self.mask_dir = mask_dir
         
         self.mask_path_list = os.listdir(mask_dir)
+        self.transform = transform
         
 
     def get_bounding_box(self, ground_truth_map):
@@ -71,39 +71,51 @@ class SAMDataset(Dataset):
         # mask = np.array(mask)
         # mask[mask==2] =  1
         mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
-        mask = cv2.resize(mask, (256, 256))
+        # mask = cv2.resize(mask, (256, 256))
         mask = cv2.threshold(mask, 127, 1, cv2.THRESH_BINARY)[1].astype(bool)
 
-        ground_truth_mask = mask
         img_path = os.path.join(self.img_dir, self.mask_path_list[idx].replace('_mask',''))
         image = Image.open(img_path)
         # image = item["image"]
-        # ground_truth_mask = np.array(item["label"])
+        # mask = np.array(item["label"])
     
-        # get bounding box prompt
-        prompt = self.get_bounding_box(ground_truth_mask)
+
+        if self.transform:
+            image, mask = self.transform(image, mask)
+
+        mask = zoom(mask, 256./INPUT_PATCH_SIZE, order=1)  # order=1 for bilinear interpolation
+
+        prompt = self.get_bounding_box(mask)
         
         # prepare image and prompt for the model
         inputs = self.processor(image, input_boxes=[[prompt]], return_tensors="pt")
         
-        pdb.set_trace()
+        # pdb.set_trace()
         # remove batch dimension which the processor adds by default
         inputs = {k:v.squeeze(0) for k,v in inputs.items()}
         
         # add ground truth segmentation
-        inputs["ground_truth_mask"] = ground_truth_mask
+        inputs["ground_truth_mask"] = mask
         
         return inputs
 
     
-    
+# Define transformations for both images and masks using torchvision.transforms.v2 and RandAugment
+transform = T.Compose([
+    T.RandomResizedCrop((1024, 1024), scale=(0.8, 1.2)),  # Random resized crop
+    T.RandomHorizontalFlip(),  # Random horizontal flipping
+    T.RandomVerticalFlip(),    # Random vertical flipping
+    T.RandomRotation(degrees=(-45, 45)),  # Random rotation
+    T.RandomAffine(degrees=0, translate=(0.2, 0.2)),  # Random shifts (adjust translate values as needed)
+])
     
 
 processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
 
-train_dataset = SAMDataset(img_dir= image_dir, mask_dir= mask_dir, processor=processor)
+train_dataset = SAMDataset(img_dir= image_dir, mask_dir= mask_dir, processor=processor, transform = None)
 
 train_dataloader = DataLoader(train_dataset, batch_size=3, shuffle=True)
+
 
 
 # In[5]:
