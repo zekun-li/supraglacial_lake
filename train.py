@@ -85,7 +85,8 @@ class SAMDataset(Dataset):
 
         mask = zoom(mask, 256./INPUT_PATCH_SIZE, order=1)  # order=1 for bilinear interpolation
 
-        prompt = self.get_bounding_box(mask)
+        # prompt = self.get_bounding_box(mask)
+        prompt = [0,0,INPUT_PATCH_SIZE,INPUT_PATCH_SIZE]
         
         # prepare image and prompt for the model
         inputs = self.processor(image, input_boxes=[[prompt]], return_tensors="pt")
