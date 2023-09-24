@@ -25,7 +25,7 @@ import random
 from transformers import SamModel 
 
 INPUT_PATCH_SIZE = 1024
-num_epochs = 1
+num_epochs = 10
 image_dir = '../data/data_crop1024_shift512/train_images'
 mask_dir = '../data/data_crop1024_shift512/train_mask'
 positive_file = '../data/positive_list.txt'
