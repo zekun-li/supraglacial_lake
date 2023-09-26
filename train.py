@@ -30,6 +30,7 @@ image_dir = '../data/data_crop1024_shift512/train_images'
 mask_dir = '../data/data_crop1024_shift512/train_mask'
 positive_file = '../data/positive_list.txt'
 negative_file = '../data/negative_list.txt'
+hard_negative_file = '../data/hard_negative_samples.txt'
 checkpoint_dir = 'checkpoints_lr5e-6/'
 
 with open(positive_file, 'r') as f:
@@ -38,6 +39,8 @@ with open(positive_file, 'r') as f:
 with open(negative_file, 'r') as f:
     negative_list = f.readlines()
 
+with open(hard_negative_file, 'r') as f:
+    hard_negative_list = f.readlines()
 
 class SAMDataset(Dataset):
     def __init__(self, img_dir, mask_dir, processor, transform = None):
@@ -53,6 +56,7 @@ class SAMDataset(Dataset):
 
         self.positive_list = positive_list 
         self.negative_list = negative_list
+        self.hard_negative_list = hard_negative_list
         
 
     # def get_bounding_box(self, ground_truth_map):
@@ -82,8 +86,13 @@ class SAMDataset(Dataset):
             # select postive 
             cur_filename = random.choice(self.positive_list).strip()
         else:
-            # select negative
-            cur_filename = random.choice(self.negative_list).strip()
+            if random.random() > 0.5: 
+                # select random negative
+                cur_filename = random.choice(self.negative_list).strip()
+            else:
+                # select hard negative
+                cur_filename = random.choice(self.hard_negative_list).strip()
+
 
         mask_path = os.path.join(self.mask_dir,cur_filename)
         # mask = Image.open(mask_path)
