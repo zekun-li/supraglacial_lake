@@ -30,7 +30,7 @@ image_dir = '../data/data_crop1024_shift512/train_images'
 mask_dir = '../data/data_crop1024_shift512/train_mask'
 positive_file = '../data/positive_list.txt'
 negative_file = '../data/negative_list.txt'
-checkpoint_dir = 'checkpoints/'
+checkpoint_dir = 'checkpoints_lr5e-6/'
 
 with open(positive_file, 'r') as f:
     positive_list = f.readlines()
@@ -156,7 +156,7 @@ for name, param in model.named_parameters():
 
 
 # Note: Hyperparameter tuning could improve performance here
-optimizer = Adam(model.mask_decoder.parameters(), lr=1e-5, weight_decay=0)
+optimizer = Adam(model.mask_decoder.parameters(), lr=5e-6, weight_decay=0)
 
 seg_loss = monai.losses.DiceCELoss(sigmoid=True, squared_pred=True, reduction='mean')
 
