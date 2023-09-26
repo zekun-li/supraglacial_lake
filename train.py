@@ -31,7 +31,7 @@ mask_dir = '../data/data_crop1024_shift512/train_mask'
 positive_file = '../data/positive_list.txt'
 negative_file = '../data/negative_list.txt'
 hard_negative_file = '../data/hard_negative_samples.txt'
-checkpoint_dir = 'checkpoints_lr5e-6/'
+checkpoint_dir = 'checkpoints_lr5e-6_hardneg/'
 
 with open(positive_file, 'r') as f:
     positive_list = f.readlines()
