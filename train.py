@@ -16,7 +16,7 @@ torchvision.disable_beta_transforms_warning()
 import torchvision.transforms.v2 as T
 
 from transformers import SamProcessor
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 from torch.optim import Adam
 import monai
 from scipy.ndimage import zoom
@@ -31,7 +31,7 @@ mask_dir = '../data/data_crop1024_shift512/train_mask'
 positive_file = '../data/positive_list.txt'
 negative_file = '../data/negative_list.txt'
 hard_negative_file = '../data/hard_negative_samples.txt'
-checkpoint_dir = 'checkpoints_lr5e-6_hardneg/'
+checkpoint_dir = 'checkpoints_valid/'
 
 with open(positive_file, 'r') as f:
     positive_list = f.readlines()
@@ -58,23 +58,6 @@ class SAMDataset(Dataset):
         self.negative_list = negative_list
         self.hard_negative_list = hard_negative_list
         
-
-    # def get_bounding_box(self, ground_truth_map):
-    #     # get bounding box from mask
-    #     y_indices, x_indices = np.where(ground_truth_map > 0)
-    #     if len(x_indices) == 0:
-    #         return [0,0,INPUT_PATCH_SIZE,INPUT_PATCH_SIZE]
-        
-    #     x_min, x_max = np.min(x_indices), np.max(x_indices)
-    #     y_min, y_max = np.min(y_indices), np.max(y_indices)
-    #     # add perturbation to bounding box coordinates
-    #     H, W = ground_truth_map.shape
-    #     x_min = max(0, x_min - np.random.randint(0, 20))
-    #     x_max = min(W, x_max + np.random.randint(0, 20))
-    #     y_min = max(0, y_min - np.random.randint(0, 20))
-    #     y_max = min(H, y_max + np.random.randint(0, 20))
-    #     bbox = [x_min, y_min, x_max, y_max]
-    #     return bbox
     
     def __len__(self):
         return len(self.positive_list) * 2
@@ -143,8 +126,16 @@ processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
 
 train_dataset = SAMDataset(img_dir= image_dir, mask_dir= mask_dir, processor=processor, transform = None)
 
-train_dataloader = DataLoader(train_dataset, batch_size=3, shuffle=True)
 
+# Define the sizes for the train and eval sets
+train_size = int(0.8 * len(train_dataset))  # 80% for training
+val_size = len(train_dataset) - train_size  # Remaining for evaluation
+
+train_dataset, val_dataset = random_split(train_dataset, [train_size, val_size])
+
+
+train_dataloader = DataLoader(train_dataset, batch_size=3, shuffle=True)
+val_dataloader = DataLoader(val_dataset, batch_size=3, shuffle=False)
 
 
 # In[5]:
@@ -200,7 +191,24 @@ for epoch in range(num_epochs):
         loop.set_description(f"Epoch [{epoch}/{num_epochs}]")
         loop.set_postfix(loss=loss.item())
 
+    val_loss = 0
+    # validation loss
+    with torch.no_grad(): 
+        for batch in val_dataloader:
+            outputs = model(pixel_values=batch["pixel_values"].to(device),
+                      input_boxes=batch["input_boxes"].to(device),
+                      multimask_output=False)
 
+            # compute loss
+            predicted_masks = outputs.pred_masks.squeeze(1)
+
+            ground_truth_masks = batch["ground_truth_mask"].float().to(device)
+            loss = seg_loss(predicted_masks, ground_truth_masks.unsqueeze(1))
+
+            val_loss += loss.item() * len(batch) 
+        average_loss = val_loss/len(val_dataloader) / len(val_dataloader.dataset)
+
+        print('validation_loss:', average_loss)
 
     print(f'EPOCH: {epoch}')
     print(f'Mean loss: {mean(epoch_losses)}')
